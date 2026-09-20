@@ -81,7 +81,7 @@
 
 Vagrant.configure("2") do |config|
 
-  config.vm.box = "cloud-image/alpine-3.24"
+  config.vm.box = "cloud-image/debian-13"
 
   # We don't need the default /vagrant shared folder
   # for this infrastructure lab.
@@ -106,8 +106,9 @@ Vagrant.configure("2") do |config|
 
     # Minimal VirtualBox resources
     server.vm.provider "virtualbox" do |vb|
-      vb.memory = 512
-      vb.cpus = 1
+	  vb.gui = true
+      vb.memory = 1024
+      vb.cpus = 2
     end
 
     # Configure SSH server and verify networking
@@ -116,18 +117,6 @@ Vagrant.configure("2") do |config|
       inline: <<-'SHELL'
 
         set -eu
-
-        # Install OpenSSH server if necessary
-        apk add --no-cache openssh
-
-        # Make sure the SSH daemon is enabled
-        rc-update add sshd default
-
-        # Start SSH immediately
-        rc-service sshd start || true
-
-        # Make sure the hostname is correct
-        hostname "gabriferS"
 
       SHELL
   end
@@ -156,18 +145,6 @@ Vagrant.configure("2") do |config|
       inline: <<-'SHELL'
 
         set -eu
-
-        # Install OpenSSH server if necessary
-        apk add --no-cache openssh
-
-        # Enable SSH at boot
-        rc-update add sshd default
-
-        # Start SSH immediately
-        rc-service sshd start || true
-
-        # Make sure the hostname is correct
-        hostname "smagninySW"
 
       SHELL
   end
