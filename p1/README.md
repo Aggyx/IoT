@@ -284,6 +284,93 @@ vagrant destroy
 - Chequear procesos en ejecución: `ps aux | grep k3s`
 - Habilitar logging verbose: `sudo systemctl status k3s -n 20`
 
+## Scripts de Provisioning Modular
+
+### Estructura de Scripts
+
+Los scripts de provisioning están localizados en la carpeta `scripts/` y son independientes y reutilizables:
+
+#### provision-server.sh
+Script de instalación del nodo control plane (servidor k3s):
+
+```bash
+./scripts/provision-server.sh <NODE_IP>
+```
+
+**Funciones:**
+1. Detecta dinámicamente la interfaz de red
+2. Genera configuración de k3s en `/etc/rancher/k3s/config.yaml`
+3. Descarga e instala k3s en modo servidor
+4. Espera a que el API server esté completamente listo (max 180 intentos)
+5. Genera el token de unión en `/var/lib/rancher/k3s/server/node-token`
+6. Copia el token a carpeta sincronizada `/tokens/node-token`
+7. Verifica el estado del cluster con `kubectl get nodes -o wide`
+
+#### provision-worker.sh
+Script de instalación del nodo worker (agente k3s):
+
+```bash
+./scripts/provision-worker.sh <NODE_IP> <SERVER_IP>
+```
+
+**Funciones:**
+1. Detecta dinámicamente la interfaz de red
+2. Genera configuración de k3s en `/etc/rancher/k3s/config.yaml`
+3. Espera a que el servidor genere el token (max 180 intentos)
+4. Lee el token desde la carpeta sincronizada `/tokens/node-token`
+5. Descarga e instala k3s en modo agente
+6. Establece conexión HTTPS con el servidor k3s
+7. Se registra automáticamente en el control plane
+8. Verifica la registración (max 120 intentos)
+
+### Archivos de Configuración
+
+Los archivos de configuración están en `confs/` y contienen las variables de entorno:
+
+#### confs/server.env
+Variables de configuración del servidor k3s:
+- `SERVER_NODE_IP`: 192.168.56.110
+- `K3S_API_PORT`: 6443
+- `VM_MEMORY`: 1024 MB
+- `VM_CPUS`: 1
+- `KUBECONFIG_MODE`: 644
+
+#### confs/worker.env
+Variables de configuración del worker k3s:
+- `WORKER_NODE_IP`: 192.168.56.111
+- `K3S_SERVER_IP`: 192.168.56.110
+- `K3S_SERVER_PORT`: 6443
+- `VM_MEMORY`: 512 MB
+- `VM_CPUS`: 1
+- `TOKEN_WAIT_TIMEOUT`: 180 segundos
+- `NODE_REGISTRATION_TIMEOUT`: 120 segundos
+
+### Integración con Vagrant
+
+El Vagrantfile llama a los scripts de provisioning:
+
+**Para el servidor:**
+```ruby
+server.vm.provision "shell",
+    name: "configure-server",
+    path: "scripts/provision-server.sh",
+    args: ["192.168.56.110"]
+```
+
+**Para el worker:**
+```ruby
+serverworker.vm.provision "shell",
+    name: "configure-serverworker",
+    path: "scripts/provision-worker.sh",
+    args: ["192.168.56.111", "192.168.56.110"]
+```
+
+Después de cualquier cambio:
+```bash
+vagrant destroy
+vagrant up
+```
+
 ## Referencias
 
 [Documentación Oficial k3s](https://docs.k3s.io/)
