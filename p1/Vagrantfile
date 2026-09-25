@@ -1,0 +1,55 @@
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "cloud-image/debian-13"
+
+
+  # Por defecto, la carpeta actual no se comparte con la máquina virtual.
+  # La carpeta .tokens se comparte para pasar el token de unión de k3s del servidor al agente.
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder ".tokens", "/tokens", create: true
+
+  # Reemplazar le par de llaves inseguro
+  config.ssh.insert_key = true
+
+  # ------------------------------------------------------------
+  # Server — k3s CONTROL PLANE
+  # ------------------------------------------------------------
+
+  config.vm.define "gabriferS" do |server|
+
+    server.vm.hostname = "gabriferS"
+
+    server.vm.network "private_network", ip: "192.168.56.110" # definir IP estática para el servidor k3s
+
+    server.vm.provider "virtualbox" do |vb|
+      vb.memory = 1024 # Permitimos 1024 para el servidor k3s
+      vb.cpus = 1
+    end
+
+    server.vm.provision "shell",
+        name: "configure-server",
+        path: "scripts/provision-server.sh",
+        args: ["192.168.56.110"]
+  end
+
+  # ------------------------------------------------------------
+  # ServerWorker — k3s agente
+  # ------------------------------------------------------------
+
+  config.vm.define "smagninySW" do |serverworker|
+    serverworker.vm.hostname = "smagninySW"
+
+    serverworker.vm.network "private_network", ip: "192.168.56.111"
+
+    serverworker.vm.provider "virtualbox" do |vb|
+      vb.memory = 512
+      vb.cpus = 1
+    end
+
+    serverworker.vm.provision "shell",
+      name: "configure-serverworker",
+      path: "scripts/provision-worker.sh",
+      args: ["192.168.56.111", "192.168.56.110"]
+  end
+
+end
