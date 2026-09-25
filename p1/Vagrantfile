@@ -36,8 +36,8 @@ Vagrant.configure("2") do |config|
   # ServerWorker — k3s agente
   # ------------------------------------------------------------
 
-  config.vm.define "henriSW" do |serverworker|
-    serverworker.vm.hostname = "henriSW"
+  config.vm.define "smagninySW" do |serverworker|
+    serverworker.vm.hostname = "smagninySW"
 
     serverworker.vm.network "private_network", ip: "192.168.56.111"
 
