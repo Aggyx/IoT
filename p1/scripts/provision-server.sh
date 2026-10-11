@@ -66,11 +66,10 @@ if [ ! -f /var/lib/rancher/k3s/server/node-token ]; then
   exit 1
 fi
 
-# Copiar el token a la carpeta compartida para que los nodos worker puedan acceder a él
-mkdir -p /tokens
-cp /var/lib/rancher/k3s/server/node-token /tokens/node-token
-chmod 644 /tokens/node-token
-echo "Token copiado a /tokens/node-token"
+# After the token is successfully created and verified:
+echo "Exponiendo el token temporalmente en la red privada..."
+# Usa python3 para servir el archivo de forma segura y rápida en el puerto 8000
+python3 -m http.server 8000 --directory /var/lib/rancher/k3s/server &
 
 echo ""
 echo "Comprobando el clúster k3s..."
