@@ -13,13 +13,6 @@ NODE_IP="$1"
 IFACE=$(ip -o -4 addr show | awk '{print $2, $4}' | grep "$NODE_IP" | cut -d' ' -f1) && [ -n "$IFACE" ] || { echo "ERROR: no interface has IP $NODE_IP"; exit 1; }
 echo "Usando interfaz $IFACE para $NODE_IP"
 
-# Detener k3s si ya está en ejecución para asegurar un reinicio limpio
-if systemctl is-active --quiet k3s 2>/dev/null; then
-  echo "Deteniendo el servicio k3s existente..."
-  systemctl stop k3s
-  sleep 2
-fi
-
 # Crear directorio de configuración de rancher/k3s
 mkdir -p /etc/rancher/k3s
 
@@ -33,10 +26,7 @@ EOF
 echo "Instalando el servidor k3s..."
 curl -sfL https://get.k3s.io | sh -s - server
 
-# Explicitamente iniciar el servicio k3s
-echo "Iniciando el servicio k3s..."
-systemctl restart k3s
-sleep 3
+sleep 5
 
 # Esperar a que la API esté completamente lista
 echo "Esperando a que el servidor API de k3s esté listo (esto puede tardar 30-60 segundos)..."
@@ -53,7 +43,7 @@ done
 
 echo "Esperando el archivo node-token..."
 for i in $(seq 1 60); do
-  if [ -f /var/lib/rancher/k3s/server/node-token ]; then
+  if [ -s /var/lib/rancher/k3s/server/node-token ]; then
     echo "Node token encontrado!"
     break
   fi
@@ -61,7 +51,7 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-if [ ! -f /var/lib/rancher/k3s/server/node-token ]; then
+if [ ! -s /var/lib/rancher/k3s/server/node-token ]; then
   echo "ERROR: TOKEN no encontrado"
   systemctl status k3s
   journalctl -u k3s -n 100
