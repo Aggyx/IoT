@@ -8,9 +8,7 @@ Al empezar un proyecto con vagrant tenemos que escoger la imagen que deseamos ut
 
 **Primera Selección:** Alpine 3.24 (cloud-image/alpine-3.24)
 
-**Selección actual:** Debian 13 (cloud-image/debian-13)
-
-Cambio realizado porque Debian 13 ofrece mejor compatibilidad con k3s, mejor balance entre características y recursos, y comunidad más amplia para troubleshooting.
+**Imagen actual:** Debian 12 (`debian/bookworm64`), configurada para las dos máquinas en el `Vagrantfile`.
 
 ## Estructura del Vagrantfile
 
@@ -38,7 +36,7 @@ config
 │   ├── vm.provider (1GB RAM, 1 CPU)
 │   └── vm.provision (k3s server setup)
 │
-└── henriSW (Worker Node - k3s agent)
+└── smagninySW (Worker Node - k3s agent)
     ├── vm.define
     ├── vm.hostname
     ├── vm.network (192.168.56.111)
@@ -90,7 +88,7 @@ destroy    → delete VM
         │  Network: 10.42.0.x   │
         │
 ┌────────────────┴─────────────────┐
-│     henriSW (Worker Node)        │
+│     smagninySW (Worker Node)     │
 │  IP: 192.168.56.111              │
 │  Memory: 512MB | CPU: 1          │
 │  Role: k3s-agent                 │
@@ -128,7 +126,7 @@ El flujo de instalación del servidor k3s es el siguiente:
    └── Output de k3s kubectl get nodes -o wide (estado del nodo)
 ```
 
-### 2. Instalación del Worker Node (henriSW - Agente k3s)
+### 2. Instalación del Worker Node (smagninySW - Agente k3s)
 
 El flujo de instalación del agente k3s es el siguiente:
 
@@ -151,8 +149,8 @@ El flujo de instalación del agente k3s es el siguiente:
 
 # 4. Registro del Nodo
    ├── Esperar a que nodo se registre con el control plane
-   ├── Polling al control plane (máx 120 intentos)
-   └── Confirmar que estado del worker es Ready
+   ├── Consultar el estado del propio nodo con credenciales del kubelet (máx 120 intentos)
+   └── Confirmar que el worker está registrado
 ```
 
 ## Configuración de Rancher/k3s
@@ -170,7 +168,7 @@ write-kubeconfig-mode: '644'
 - `flannel-iface`: Especifica interfaz de red para overlay network Flannel
 - `write-kubeconfig-mode`: Permite acceso kubectl sin sudo
 
-### Configuración del Agente (/etc/rancher/k3s/config.yaml en henriSW)
+### Configuración del Agente (/etc/rancher/k3s/config.yaml en smagninySW)
 
 ```yaml
 node-ip: 192.168.56.111
@@ -252,13 +250,13 @@ vagrant ssh gabriferS
 
 ### Acceder al Worker Node
 ```bash
-vagrant ssh henriSW
+vagrant ssh smagninySW
 ```
 
 ### Ver logs de servicios
 ```bash
 vagrant ssh gabriferS -c "sudo journalctl -u k3s -n 50"
-vagrant ssh henriSW -c "sudo journalctl -u k3s-agent -n 50"
+vagrant ssh smagninySW -c "sudo journalctl -u k3s-agent -n 50"
 ```
 
 ### Limpiar el cluster

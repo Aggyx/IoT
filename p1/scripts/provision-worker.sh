@@ -5,6 +5,8 @@
 
 set -eu
 
+apt-get update && apt-get install -y curl 
+
 NODE_IP="$1"
 SERVER_IP="$2"
 
@@ -26,34 +28,23 @@ EOF
 
 echo "Esperando el token del servidor k3s desde $SERVER_IP..."
 for i in $(seq 1 180); do
-  if [ -f /tokens/node-token ]; then
+  if [ -s /tokens/node-token ]; then
     echo "Token encontrado!"
     break
-     fi
+  fi
   if [ $((i % 20)) -eq 0 ]; then
     echo "Esperando el token... ($i/180)"
   fi
   sleep 1
 done
 
-if [ ! -f /tokens/node-token ]; then
+if [ ! -s /tokens/node-token ]; then
   echo "ERROR: TOKEN no esta en /tokens"
   ls -la /tokens/ || true
   exit 1
 fi
 
 TOKEN=$(cat /tokens/node-token)
-if [ -z "$TOKEN" ]; then
-  echo "ERROR: El archivo de token está vacío"
-  exit 1
-fi
-
-# Detener k3s-agent si ya está en ejecución
-if systemctl is-active --quiet k3s-agent 2>/dev/null; then
-  echo "Deteniendo el agente k3s existente..."
-  systemctl stop k3s-agent
-  sleep 2
-fi
 
 echo "Token recibido, iniciando el agente k3s..."
 curl -sfL https://get.k3s.io | \
@@ -61,15 +52,17 @@ curl -sfL https://get.k3s.io | \
   K3S_TOKEN="$TOKEN" \
   sh -
 
-# k3s-agent es iniciado automáticamente por el instalador, solo esperar a que esté listo
-echo "Esperando a que el agente k3s esté listo..."
 sleep 5
 
-echo "Esperando a que el nodo se registre en el servidor..."
+NODE_NAME=$(hostname | tr '[:upper:]' '[:lower:]')
+echo "Esperando a que el nodo $NODE_NAME se registre..."
 for i in $(seq 1 120); do
-  if /usr/local/bin/k3s-agent kubectl get nodes 2>/dev/null | grep -q "$(hostname)"; then
-    echo "Nodo registrado!"
-    break
+  if [ -f /var/lib/rancher/k3s/agent/kubelet.kubeconfig ]; then
+    export KUBECONFIG=/var/lib/rancher/k3s/agent/kubelet.kubeconfig
+    if /usr/local/bin/kubectl get node "$NODE_NAME" >/dev/null 2>&1; then
+      echo "Nodo $NODE_NAME registrado!"
+      break
+    fi
   fi
   if [ $((i % 20)) -eq 0 ]; then
     echo "Esperando a que el nodo se registre... ($i/120)"
@@ -77,4 +70,11 @@ for i in $(seq 1 120); do
   sleep 1
 done
 
+export KUBECONFIG=/var/lib/rancher/k3s/agent/kubelet.kubeconfig
+if ! /usr/local/bin/kubectl get node "$NODE_NAME" >/dev/null 2>&1; then
+  echo "ERROR: el nodo $NODE_NAME no se registró en el servidor"
+  exit 1
+fi
+
 echo "Instalación completada del agente k3s"
+
