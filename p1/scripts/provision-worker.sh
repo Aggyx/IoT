@@ -24,23 +24,27 @@ node-ip: $NODE_IP
 flannel-iface: $IFACE
 EOF
 
-echo "Descargando el token del servidor k3s desde $SERVER_IP..."
+echo "Esperando el token del servidor k3s desde $SERVER_IP..."
 for i in $(seq 1 180); do
-  # Descarga el node-token directamente por HTTP desde la red privada
-  if TOKEN=$(curl -sfL "http://${SERVER_IP}:8000/node-token"); then
-    if [ -n "$TOKEN" ]; then
-      echo "Token descargado exitosamente!"
-      break
-    fi
-  fi
+  if [ -f /tokens/node-token ]; then
+    echo "Token encontrado!"
+    break
+     fi
   if [ $((i % 20)) -eq 0 ]; then
     echo "Esperando el token... ($i/180)"
   fi
   sleep 1
 done
 
-if [ -z "${TOKEN:-}" ]; then
-  echo "ERROR: No se pudo obtener el token por la red"
+if [ ! -f /tokens/node-token ]; then
+  echo "ERROR: TOKEN no esta en /tokens"
+  ls -la /tokens/ || true
+  exit 1
+fi
+
+TOKEN=$(cat /tokens/node-token)
+if [ -z "$TOKEN" ]; then
+  echo "ERROR: El archivo de token está vacío"
   exit 1
 fi
 
