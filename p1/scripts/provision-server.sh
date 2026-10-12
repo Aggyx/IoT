@@ -5,6 +5,8 @@
 
 set -eu
 
+apt-get update && apt-get install -y curl 
+
 NODE_IP="$1"
 
 # Recogemos la interfaz activa de manera dinamica para sacar siempre el nombre de la interfaz correcta asociada a la IP

@@ -5,6 +5,8 @@
 
 set -eu
 
+apt-get update && apt-get install -y curl
+
 NODE_IP="$1"
 
 # Recogemos la interfaz activa de manera dinamica para sacar siempre el nombre de la interfaz correcta asociada a la IP
@@ -187,7 +189,7 @@ for i in $(seq 1 300); do
   sleep 1
 done
 
-¡echo "Esperando a que los pods de Traefik se levanten..."
+echo "Esperando a que los pods de Traefik se levanten..."
 for i in $(seq 1 120); do
   TRAEFIK_READY=$(k3s kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik -o jsonpath='{.items[*].status.phase}' 2>/dev/null | grep -c Running || true)
   if [ "$TRAEFIK_READY" -gt 0 ]; then

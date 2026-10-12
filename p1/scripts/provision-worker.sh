@@ -5,6 +5,8 @@
 
 set -eu
 
+apt-get update && apt-get install -y curl
+
 NODE_IP="$1"
 SERVER_IP="$2"
 

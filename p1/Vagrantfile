@@ -1,6 +1,6 @@
 Vagrant.configure("2") do |config|
 
-  config.vm.box = "cloud-image/debian-13"
+  config.vm.box = "debian/bookworm64"
 
 
   # Por defecto, la carpeta actual no se comparte con la máquina virtual.

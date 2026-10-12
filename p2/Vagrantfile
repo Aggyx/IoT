@@ -1,10 +1,11 @@
 Vagrant.configure("2") do |config|
 
-  config.vm.box = "cloud-image/debian-13"
+  config.vm.box = "debian/bookworm64"
 
   # Por defecto, la carpeta actual no se comparte con la máquina virtual.
   # La carpeta .tokens se comparte para pasar el token de unión de k3s del servidor al agente.
   config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder ".tokens", "/tokens", create: true
 
   # Reemplazar le par de llaves inseguro
   config.ssh.insert_key = true
