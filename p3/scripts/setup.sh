@@ -13,7 +13,7 @@ fi
 
 # delete a possible older version of the cluster and create a new one 
 k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-k3d cluster create "$CLUSTER_NAME" --port "8888:8888@loadbalancer"
+k3d cluster create "$CLUSTER_NAME"  --servers 1 --agents 2 --port "8888:8888@loadbalancer"
 
 
 # namespace: isolate group of resources inside the cluster
