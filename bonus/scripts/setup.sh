@@ -42,7 +42,11 @@ TMP=/tmp/iot-malde-ch
 
 # 1. Reach GitLab: hosts entry + port-forward in the background
 grep -q gitlab.iot.test /etc/hosts || echo "127.0.0.1 gitlab.iot.test" | sudo tee -a /etc/hosts
-kube -n gitlab port-forward svc/gitlab 8081:8081 >/dev/null 2>&1 &
+# Call kubectl directly (not the kube function) so that $! is kubectl's own PID.
+kubectl --context "$KUBE_CONTEXT" -n gitlab port-forward svc/gitlab 8081:8081 >/dev/null 2>&1 &
+GITLAB_PF_PID=$!
+# Stop the GitLab port-forward whenever the script ends (error, Ctrl-C or normal exit).
+trap 'kill "$GITLAB_PF_PID" 2>/dev/null || true' EXIT
 
 
 until curl -fs -o /dev/null http://gitlab.iot.test:8081/users/sign_in; do sleep 2; done
@@ -94,8 +98,13 @@ kube apply -f "$CONFS_DIR/application.yaml"
 
 kube -n argocd wait application/playground --for=jsonpath='{.status.sync.status}'=Synced --timeout=300s
 
-exec kubectl --context k3d-iot -n argocd port-forward svc/argocd-server 8080:443 &
+ARGOCD_PASSWORD=$(kube -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
 
+echo
+echo "GitLab : http://gitlab.iot.test:8081  (root / $PASSWORD)"
+echo "Argo CD: https://localhost:8080       (admin / $ARGOCD_PASSWORD)"
+echo "App    : http://localhost:8888"
+echo "Press Ctrl-C to stop the port-forwards."
 
-echo "GitLab : lancez scripts/gitlab.sh, puis publiez le depot avant d'appliquer application.yaml."
-echo "Argo CD : lancez scripts/argocd.sh."
+# Foreground: the script stays here until Ctrl-C, then the EXIT trap stops GitLab's port-forward.
+kube -n argocd port-forward svc/argocd-server 8080:443
