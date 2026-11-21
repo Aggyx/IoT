@@ -58,11 +58,16 @@ AUTH_REPO="http://root:$(jq -rn --arg p "$PASSWORD" '$p|@uri')@${REPO#http://}"
 # 3. Push the manifests. The first push creates the private project ("push to create").
 rm -rf "$TMP"
 git clone -q "$AUTH_REPO" "$TMP" 2>/dev/null || git init -q -b main "$TMP"
-cd ../
-cp -R iot-lab/ "$TMP/"
-git -C "$TMP" add deployment.yaml service.yaml
+
+mkdir -p "$TMP/manifests"
+
+cp -R "$CONFS_DIR/../iot-lab/." "$TMP/manifests/"
+
+git -C "$TMP" add manifests
+
 git -C "$TMP" -c user.name=root -c user.email=root@iot.test \
     commit -qm "feat(manifests): deploy hello world" || echo "Nothing new to commit"
+
 git -C "$TMP" push -q "$AUTH_REPO" HEAD:main
 rm -rf "$TMP"
 

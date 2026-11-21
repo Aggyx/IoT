@@ -10,6 +10,41 @@ Al empezar un proyecto con vagrant tenemos que escoger la imagen que deseamos ut
 
 **Imagen actual:** Debian 12 (`debian/bookworm64`), configurada para las dos máquinas en el `Vagrantfile`.
 
+### Configuración y arranque reproducible
+
+Las IPs y los recursos se definen directamente en el Vagrantfile:
+servidor `192.168.56.110`, 1024 MB y 1 CPU; worker `192.168.56.111`,
+512 MB y 1 CPU. Vagrant pasa las IPs como argumentos a los scripts.
+Los parámetros de k3s permanecen en los scripts, sin archivos de entorno.
+La carpeta `confs/` queda vacía.
+
+La caja está fijada a `12.20250126.1`, publicada para VirtualBox/amd64.
+`12.20260519.1` solo tiene proveedor libvirt y no sirve con este Vagrantfile.
+`box_url` apunta a metadatos JSON, no a la página HTML de descubrimiento.
+El proveedor no construye una imagen nueva: descarga/importa la caja Debian
+y luego instala k3s con los scripts.
+
+```bash
+# Requiere Vagrant y VirtualBox instalados en el host
+cd p1
+vagrant validate
+vagrant box add debian/bookworm64 --box-version 12.20250126.1 --provider virtualbox
+vagrant up gabriferS --provider=virtualbox
+vagrant up smagninySW --provider=virtualbox
+vagrant ssh gabriferS -c "sudo k3s kubectl wait --for=condition=Ready nodes --all --timeout=180s"
+vagrant ssh gabriferS -c "sudo k3s kubectl get nodes -o wide"
+```
+
+El servidor debe arrancar antes del worker para generar el token. p1 y p2
+usan la misma IP del servidor: detén p1 con `vagrant halt` antes de iniciar p2.
+Tras cambiar solo parámetros de k3s, usa `vagrant provision`; tras cambiar
+IPs, RAM o CPUs, usa `vagrant reload --provision`.
+
+**Disponibilidad del registro:** HashiCorp anuncia el cierre de HCP Vagrant
+el 31 de diciembre de 2026. El pin no garantiza disponibilidad indefinida;
+antes del cierre hay que conservar/republicar la caja y sus metadatos en
+un registro propio. Véase [aviso oficial](https://developer.hashicorp.com/hcp/docs/vagrant/hcp-vagrant-eol).
+
 ## Estructura del Vagrantfile
 
 ```
@@ -292,7 +327,7 @@ Los scripts de provisioning están localizados en la carpeta `scripts/` y son in
 Script de instalación del nodo control plane (servidor k3s):
 
 ```bash
-./scripts/provision-server.sh <NODE_IP>
+sudo bash ./scripts/provision-server.sh 192.168.56.110
 ```
 
 **Funciones:**
@@ -308,7 +343,7 @@ Script de instalación del nodo control plane (servidor k3s):
 Script de instalación del nodo worker (agente k3s):
 
 ```bash
-./scripts/provision-worker.sh <NODE_IP> <SERVER_IP>
+sudo bash ./scripts/provision-worker.sh 192.168.56.111 192.168.56.110
 ```
 
 **Funciones:**
@@ -321,31 +356,16 @@ Script de instalación del nodo worker (agente k3s):
 7. Se registra automáticamente en el control plane
 8. Verifica la registración (max 120 intentos)
 
-### Archivos de Configuración
+### Parámetros de los scripts
 
-Los archivos de configuración están en `confs/` y contienen las variables de entorno:
-
-#### confs/server.env
-Variables de configuración del servidor k3s:
-- `SERVER_NODE_IP`: 192.168.56.110
-- `K3S_API_PORT`: 6443
-- `VM_MEMORY`: 1024 MB
-- `VM_CPUS`: 1
-- `KUBECONFIG_MODE`: 644
-
-#### confs/worker.env
-Variables de configuración del worker k3s:
-- `WORKER_NODE_IP`: 192.168.56.111
-- `K3S_SERVER_IP`: 192.168.56.110
-- `K3S_SERVER_PORT`: 6443
-- `VM_MEMORY`: 512 MB
-- `VM_CPUS`: 1
-- `TOKEN_WAIT_TIMEOUT`: 180 segundos
-- `NODE_REGISTRATION_TIMEOUT`: 120 segundos
+El API server usa el puerto predeterminado `6443` y el kubeconfig se
+escribe con modo `644`. El servidor copia el token desde
+`/var/lib/rancher/k3s/server/node-token` a `/tokens/node-token`.
+El worker espera el token hasta 180 segundos y su registro hasta 120 segundos.
 
 ### Integración con Vagrant
 
-El Vagrantfile llama a los scripts de provisioning:
+El Vagrantfile llama a los scripts de provisioning con las IPs:
 
 **Para el servidor:**
 ```ruby
@@ -363,10 +383,12 @@ serverworker.vm.provision "shell",
     args: ["192.168.56.111", "192.168.56.110"]
 ```
 
-Después de cualquier cambio:
+Pruebas de configuración sin crear VMs (desde la raíz del repositorio):
 ```bash
-vagrant destroy
-vagrant up
+ruby tests/vagrant_config_test.rb
+for script in p1/scripts/provision-server.sh p1/scripts/provision-worker.sh p2/scripts/provision-server.sh; do
+  bash -n "$script" || exit
+done
 ```
 
 ## Referencias
