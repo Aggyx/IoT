@@ -5,7 +5,7 @@
 set -euo pipefail
 
 sudo apt-get update
-sudo apt-get install -y curl ca-certificates
+sudo apt-get install -y curl ca-certificates jq git
 
 # each tool is installed only if it's not installed
 
