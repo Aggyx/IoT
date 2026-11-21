@@ -55,8 +55,8 @@ AUTH_REPO="http://root:$(jq -rn --arg p "$PASSWORD" '$p|@uri')@${REPO#http://}"
 rm -rf "$TMP"
 git clone -q "$AUTH_REPO" "$TMP" 2>/dev/null || git init -q -b main "$TMP"
 cd ../
-cp -R iot-malde-ch/manifests "$TMP/"
-git -C "$TMP" add manifests
+cp -R iot-lab/ "$TMP/"
+git -C "$TMP" add deployment.yaml service.yaml
 git -C "$TMP" -c user.name=root -c user.email=root@iot.test \
     commit -qm "feat(manifests): deploy hello world" || echo "Nothing new to commit"
 git -C "$TMP" push -q "$AUTH_REPO" HEAD:main
