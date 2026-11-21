@@ -88,3 +88,5 @@ Références : [installation GitLab Docker](https://docs.gitlab.com/install/dock
 [CoreDNS dans K3s](https://docs.k3s.io/advanced#coredns-custom-configuration-imports),
 [jetons de déploiement GitLab](https://docs.gitlab.com/user/project/deploy_tokens/),
 [dépôts privés Argo CD](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/).
+
+z06vsABYuEDkA6pE6YGBhhle9kwXB50lPbjknPbPAtE=

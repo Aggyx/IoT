@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: http://gitlab.iot.test:8081/iot-lab/iot-malde-ch.git
+    repoURL: http://gitlab.iot.test:8081/root/iot-malde-ch.git
     targetRevision: main
     path: manifests
   destination:
