@@ -3,9 +3,14 @@
 # Script de instalación y configuración del nodo worker k3s
 # Uso: ./provision-worker.sh <NODE_IP> <SERVER_IP>
 
-set -eu
+set -euo pipefail
 
-apt-get update && apt-get install -y curl 
+if [ "$#" -ne 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
+  echo "ERROR: uso: $0 <NODE_IP> <SERVER_IP>" >&2
+  exit 1
+fi
+
+apt-get update && apt-get install -y curl
 
 NODE_IP="$1"
 SERVER_IP="$2"
@@ -13,7 +18,7 @@ SERVER_IP="$2"
 echo "Configuración del nodo worker: NODE_IP=$NODE_IP, SERVER_IP=$SERVER_IP"
 
 # Detectar interfaz de red asociada a la IP del nodo
-IFACE=$(ip -o -4 addr show | awk '{print $2, $4}' | grep "$NODE_IP" | cut -d' ' -f1)
+IFACE=$(ip -o -4 addr show | awk -v node_ip="$NODE_IP" '{split($4, address, "/"); if (address[1] == node_ip) print $2}')
 [ -n "$IFACE" ] || { echo "ERROR: no se encontró interfaz con IP $NODE_IP"; exit 1; }
 echo "Usando interfaz $IFACE para $NODE_IP"
 
@@ -39,15 +44,14 @@ for i in $(seq 1 180); do
 done
 
 if [ ! -s /tokens/node-token ]; then
-  echo "ERROR: TOKEN no esta en /tokens"
-  ls -la /tokens/ || true
+  echo "ERROR: TOKEN no esta en /tokens/node-token" >&2
   exit 1
 fi
 
 TOKEN=$(cat /tokens/node-token)
 
 echo "Token recibido, iniciando el agente k3s..."
-curl -sfL https://get.k3s.io | \
+curl -fsSL https://get.k3s.io | \
   K3S_URL="https://${SERVER_IP}:6443" \
   K3S_TOKEN="$TOKEN" \
   sh -
@@ -77,4 +81,3 @@ if ! /usr/local/bin/kubectl get node "$NODE_NAME" >/dev/null 2>&1; then
 fi
 
 echo "Instalación completada del agente k3s"
-

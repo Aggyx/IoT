@@ -3,6 +3,36 @@
 Ahora vamos a configurar varios contenedores directamente dentro de nuestro servidor virtual
 Vamos a usar el modulo incorporado de traefik proxy para enrutar la petición según el host al contenedor correcto.
 
+## Configuración y arranque
+
+El Vagrantfile define directamente la IP `192.168.56.110`, RAM
+`2048` MB y `2` CPUs, y pasa la IP como argumento al script de
+aprovisionamiento. El script conserva el puerto API predeterminado `6443`,
+las rutas del token y el modo `644` del kubeconfig.
+No se usan archivos de entorno y la carpeta `confs/` queda vacía.
+
+La caja Debian 12 se importa, no se construye desde un Dockerfile.
+Se fija `debian/bookworm64` a `12.20250126.1` para VirtualBox/amd64;
+`12.20260519.1` solo está publicada para libvirt.
+La URL configurada devuelve metadatos JSON de Vagrant.
+HCP Vagrant [cerrará el 31 de diciembre de 2026](https://developer.hashicorp.com/hcp/docs/vagrant/hcp-vagrant-eol):
+será necesario conservar/republicar la caja y sus metadatos antes del cierre.
+
+```bash
+# Requiere Vagrant y VirtualBox. Detén p1 primero: comparte la IP .110.
+cd p1 && vagrant halt && cd ../p2
+vagrant validate
+vagrant box add debian/bookworm64 --box-version 12.20250126.1 --provider virtualbox
+vagrant up gabriferS --provider=virtualbox
+vagrant ssh gabriferS -c "sudo k3s kubectl get nodes -o wide"
+```
+
+El aprovisionamiento espera el CRD establecido, el rollout de Traefik
+y los tres Deployments; después comprueba por HTTP los hosts app1/app2,
+un host desconocido y la IP directa. Cualquier error aborta el script.
+Para parámetros k3s usa `vagrant provision`; para IP/RAM/CPU,
+`vagrant reload --provision`.
+
 # Guía de Arquitectura Vagrant + k3s
 
 ## Descripción General de la Arquitectura de Composición
@@ -25,22 +55,20 @@ Patrón de Kubernetes cluster-as-code usando Vagrant para orquestar la infraestr
 
 ```ruby
 Vagrant.configure("2") do |config|    # DSL Ruby para configuración de VM
-  config.vm.box = "cloud-image/debian-13"  # Imagen base del SO
+  config.vm.box = "debian/bookworm64"  # Imagen base del SO
+  config.vm.box_url = "https://vagrantcloud.com/api/v2/vagrant/debian/bookworm64"
+  config.vm.box_version = "12.20250126.1"
 
-  # Máquina 1: Servidor
+  # Servidor de p2
   config.vm.define "gabriferS" do |server|
     server.vm.hostname = "gabriferS"
     server.vm.network "private_network", ip: "192.168.56.110"
     server.vm.provider "virtualbox" do |vb|
-      vb.memory = 1024
-      vb.cpus = 1
+      vb.memory = 2048
+      vb.cpus = 2
     end
-    server.vm.provision "shell", path: "scripts/provision-server.sh"
-  end
-
-  # Máquina 2: Worker (solo p1)
-  config.vm.define "smagninySW" do |worker|
-    # Estructura similar con IP diferente
+    server.vm.provision "shell",
+      path: "scripts/provision-server.sh", args: ["192.168.56.110"]
   end
 end
 ```
@@ -56,7 +84,7 @@ end
    "private_network", ip: "192.168.56.110"  # Red interna, IP fija
    ```
    - Las máquinas se comunican a través de esta red privada
-   - El host no puede acceder directamente a las VMs en esta red
+   - El host puede acceder a las VMs mediante la red privada host-only de VirtualBox
 
 **3. `config.vm.provider`** es la configuración del hipervisor (VirtualBox aquí)
    ```ruby
@@ -78,6 +106,75 @@ end
 ---
 
 ## Configuración de Proxy e Ingress (Traefik)
+
+### IngressRoute frente a Ingress oficial
+
+La API oficial es **`networking.k8s.io/v1`**, no `networking.k8s.iot`.
+Traefik es el controlador/proxy; `Ingress` e `IngressRoute` son dos
+formas de configurarlo. k3s instala Traefik por defecto y puede procesar ambas.
+
+| Aspecto | Ingress | IngressRoute |
+|---------|---------|--------------|
+| API | `networking.k8s.io/v1`, estable de Kubernetes | `traefik.io/v1alpha1`, CRD de Traefik |
+| Dependencia | Requiere un controlador de Ingress | Requiere Traefik, sus CRDs y proveedor Kubernetes CRD |
+| Reglas | Hosts, paths y `pathType` estándar | Expresiones Traefik como `Host()` y `PathPrefix()` |
+| Prioridad | Sin campo estándar de prioridad numérica | `routes[].priority` explícita |
+| Extensiones | Normalmente anotaciones específicas del controlador | Middlewares, entryPoints y servicios ponderados como campos/recursos |
+| Portabilidad | Mayor para las reglas estándar; las anotaciones pueden limitarla | Acoplamiento a Traefik; migrar exige reescribir las rutas |
+| Inspección | `kubectl get ingress` | `kubectl get ingressroutes.traefik.io` |
+
+**Defensa de la estrategia actual:** el laboratorio ya usa Traefik integrado
+en k3s. Sus CRDs permiten expresar directamente los hosts con prioridad
+`100` y el fallback `PathPrefix('/')` con prioridad `1`, sin anotaciones
+para controlar esa prioridad. La decisión favorece claridad y demostración
+de las reglas del proxy, no mayor portabilidad.
+
+**Límite importante:** para este caso sencillo, Ingress estándar también
+puede expresar hosts y `spec.defaultBackend` para app3. IngressRoute no
+es una necesidad técnica. Si el enunciado exige explícitamente un recurso
+`kind: Ingress`, esta solución no cumple ese requisito y hay que cambiarla.
+Si solo exige enrutamiento HTTP, demuestra el comportamiento y explica
+la dependencia de Traefik. Kubernetes mantiene Ingress estable pero ha
+congelado su API y recomienda Gateway API para nuevas funcionalidades;
+eso no hace que IngressRoute sea la API oficial de reemplazo.
+
+Ejemplo equivalente de Ingress estándar (solo referencia; no aplicarlo
+junto a las IngressRoutes actuales para evitar routers duplicados):
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apps
+spec:
+  ingressClassName: traefik
+  defaultBackend:
+    service:
+      name: app3
+      port:
+        number: 80
+  rules:
+    - host: app1.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app1
+                port:
+                  number: 80
+    - host: app2.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app2
+                port:
+                  number: 80
+```
 
 ### Diagrama de Capa de Arquitectura
 
@@ -221,12 +318,34 @@ k3s kubectl get ingressroute
 # app2           30s
 # app3-default   30s
 
-# Prueba desde dentro del pod de Traefik
-k3s kubectl exec -it deployment/traefik -n kube-system -- /bin/sh
-# curl http://app1.com/
-# curl http://app2.com/
-# curl http://app3.local/
+# Muestra las reglas completas y sus prioridades
+k3s kubectl get ingressroutes.traefik.io -n default -o yaml
+k3s kubectl describe ingressroutes.traefik.io app1 -n default
+k3s kubectl get crd ingressroutes.traefik.io
+k3s kubectl get deployment traefik -n kube-system
+k3s kubectl get svc traefik -n kube-system
+k3s kubectl get deployment app1 app2 app3
+k3s kubectl get endpointslices -l kubernetes.io/service-name=app2
+
+# Es normal que esto no muestre las IngressRoutes: son otro tipo de recurso
+k3s kubectl get ingress -A
 ```
+
+Desde el host, sin modificar DNS ni `/etc/hosts`:
+
+```bash
+curl --fail --resolve app1.com:80:192.168.56.110 http://app1.com/ # app1
+curl --fail --resolve app2.com:80:192.168.56.110 http://app2.com/ # app2
+curl --fail -H 'Host: unknown.example' http://192.168.56.110/    # app3
+curl --fail http://192.168.56.110/                             # app3
+```
+
+`--resolve` mantiene el host HTTP correcto y fuerza la conexión a la VM.
+Abrir app1.com directamente sin DNS local puede contactar el sitio público,
+no el clúster. Para mostrarlo en el navegador, configura localmente
+`192.168.56.110 app1.com app2.com` en `/etc/hosts` y visita esos hosts.
+Los tres pods de app2 se demuestran con el Deployment y sus EndpointSlices;
+respuestas idénticas `app2` por sí solas no prueban balanceo entre réplicas.
 
 ---
 
@@ -256,9 +375,6 @@ k3s kubectl exec -it deployment/traefik -n kube-system -- /bin/sh
 [Internos de Service y kube-proxy](https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies)
 [Endpoints/EndpointSlice](https://kubernetes.io/docs/concepts/services-networking/endpoints/)
 [ReplicaSet](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/)
-
-
-
 
 
 

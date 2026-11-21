@@ -3,14 +3,20 @@
 # Script de instalación y configuración del nodo maestro k3s
 # Uso: ./provision-server.sh <NODE_IP>
 
-set -eu
+set -euo pipefail
+
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+  echo "ERROR: uso: $0 <NODE_IP>" >&2
+  exit 1
+fi
 
 apt-get update && apt-get install -y curl
 
 NODE_IP="$1"
 
 # Recogemos la interfaz activa de manera dinamica para sacar siempre el nombre de la interfaz correcta asociada a la IP
-IFACE=$(ip -o -4 addr show | awk '{print $2, $4}' | grep "$NODE_IP" | cut -d' ' -f1) && [ -n "$IFACE" ] || { echo "ERROR: no interface has IP $NODE_IP"; exit 1; }
+IFACE=$(ip -o -4 addr show | awk -v node_ip="$NODE_IP" '{split($4, address, "/"); if (address[1] == node_ip) print $2}')
+[ -n "$IFACE" ] || { echo "ERROR: no interface has IP $NODE_IP" >&2; exit 1; }
 echo "Usando interfaz $IFACE para $NODE_IP"
 
 # Detener k3s si ya está en ejecución para asegurar un reinicio limpio
@@ -31,7 +37,7 @@ write-kubeconfig-mode: '644'
 EOF
 
 echo "Instalando el servidor k3s..."
-curl -sfL https://get.k3s.io | sh -s - server
+curl -fsSL https://get.k3s.io | sh -s - server
 
 # Explicitamente iniciar el servicio k3s
 echo "Iniciando el servicio k3s..."
@@ -51,9 +57,14 @@ for i in $(seq 1 180); do
   sleep 1
 done
 
+if ! /usr/local/bin/k3s kubectl get nodes >/dev/null 2>&1; then
+  echo "ERROR: el servidor API de k3s no está listo" >&2
+  exit 1
+fi
+
 echo "Esperando el archivo node-token..."
 for i in $(seq 1 60); do
-  if [ -f /var/lib/rancher/k3s/server/node-token ]; then
+  if [ -s /var/lib/rancher/k3s/server/node-token ]; then
     echo "Node token encontrado!"
     break
   fi
@@ -61,7 +72,7 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-if [ ! -f /var/lib/rancher/k3s/server/node-token ]; then
+if [ ! -s /var/lib/rancher/k3s/server/node-token ]; then
   echo "ERROR: TOKEN no encontrado"
   systemctl status k3s
   journalctl -u k3s -n 100
@@ -189,18 +200,11 @@ for i in $(seq 1 300); do
   sleep 1
 done
 
+k3s kubectl wait --for=condition=Established crd/ingressroutes.traefik.io --timeout=60s
+
 echo "Esperando a que los pods de Traefik se levanten..."
-for i in $(seq 1 120); do
-  TRAEFIK_READY=$(k3s kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik -o jsonpath='{.items[*].status.phase}' 2>/dev/null | grep -c Running || true)
-  if [ "$TRAEFIK_READY" -gt 0 ]; then
-    echo "Traefik corriendo"
-    break
-  fi
-  if [ $((i % 20)) -eq 0 ]; then
-    echo "Esperando a los pods de Traefik... ($i/120 segundos)"
-  fi
-  sleep 1
-done
+k3s kubectl wait --for=create deployment/traefik -n kube-system --timeout=120s
+k3s kubectl rollout status deployment/traefik -n kube-system --timeout=120s
 
 # ---------------- Enrutamiento de Traefik basado en host ----------------
 cat > "$MANIFEST_DIR/ingress.yaml" <<'EOF'
