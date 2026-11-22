@@ -3,14 +3,20 @@
 # Script de instalación y configuración del nodo maestro k3s
 # Uso: ./provision-server.sh <NODE_IP>
 
-set -eu
+set -euo pipefail
 
-apt-get update && apt-get install -y curl 
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+  echo "ERROR: uso: $0 <NODE_IP>" >&2
+  exit 1
+fi
+
+apt-get update && apt-get install -y curl
 
 NODE_IP="$1"
 
 # Recogemos la interfaz activa de manera dinamica para sacar siempre el nombre de la interfaz correcta asociada a la IP
-IFACE=$(ip -o -4 addr show | awk '{print $2, $4}' | grep "$NODE_IP" | cut -d' ' -f1) && [ -n "$IFACE" ] || { echo "ERROR: no interface has IP $NODE_IP"; exit 1; }
+IFACE=$(ip -o -4 addr show | awk -v node_ip="$NODE_IP" '{split($4, address, "/"); if (address[1] == node_ip) print $2}')
+[ -n "$IFACE" ] || { echo "ERROR: no interface has IP $NODE_IP" >&2; exit 1; }
 echo "Usando interfaz $IFACE para $NODE_IP"
 
 # Crear directorio de configuración de rancher/k3s
@@ -24,7 +30,7 @@ write-kubeconfig-mode: '644'
 EOF
 
 echo "Instalando el servidor k3s..."
-curl -sfL https://get.k3s.io | sh -s - server
+curl -fsSL https://get.k3s.io | sh -s - server
 
 sleep 5
 
@@ -40,6 +46,11 @@ for i in $(seq 1 180); do
   fi
   sleep 1
 done
+
+if ! /usr/local/bin/k3s kubectl get nodes >/dev/null 2>&1; then
+  echo "ERROR: el servidor API de k3s no está listo" >&2
+  exit 1
+fi
 
 echo "Esperando el archivo node-token..."
 for i in $(seq 1 60); do
