@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# exit on error, on unset variable
-# and also if a cmd in a pipe fails
+# exit on error, on unset variables
+# and also if a command in a pipe fails
 set -euo pipefail
 
 sudo apt-get update
 sudo apt-get install -y curl git ca-certificates
 
-# each tool is installed only if it's not installed
+# each tool is installed only if it is not already installed
 
 if ! command -v docker >/dev/null 2>&1; then
     curl -fsSL https://get.docker.com | sudo sh
@@ -37,6 +37,6 @@ echo "Note: $USER added to the docker group. Re-login for it to take effect."
 
 
 
-# we can make the link of kubectl dymaic by using:
-# ARCH="$(dpkg --print-architecture)" --> but we always are going to use it on intel amd64, so no need
-# KUBECTL_VERSION="$(curl -fsSL https://dl.k8s.io/release/stable.txt)", this could be usefull.
+# we can make the kubectl link dynamic by using:
+# ARCH="$(dpkg --print-architecture)" --> but we are always going to use it on Intel amd64, so no need
+# KUBECTL_VERSION="$(curl -fsSL https://dl.k8s.io/release/stable.txt)", this could be useful.

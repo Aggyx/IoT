@@ -92,6 +92,6 @@ metadata:
   name: coredns-custom
   namespace: kube-system
 data:
-  # Les pods accedent a la meme URL que le poste, sans passer par le port-forward.
+  # Les pods accèdent à la même URL que le poste, sans passer par le port-forward.
   gitlab.override: |
     rewrite name exact gitlab.iot.test gitlab.gitlab.svc.cluster.local

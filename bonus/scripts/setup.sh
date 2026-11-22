@@ -6,7 +6,7 @@ KUBE_CONTEXT="k3d-iot"
 CONFS_DIR="$(cd "$(dirname "$0")/../confs" && pwd)"
 
 if ! docker info >/dev/null 2>&1; then
-    echo "Docker not accessibble, run the installation script (install.sh)"
+    echo "Docker not accessible, run the installation script (install.sh)"
     exit 1
 fi
 
@@ -27,9 +27,9 @@ kube create namespace argocd
 kube apply -f "$CONFS_DIR/gitlab.yaml"
 kube -n gitlab rollout status deployment/gitlab --timeout=10m
 
-# añadir 127.0.0.1 gitlab.iot.test en hosts
-# sacar contraseña root
-# usar la contraseña root para acceder a GitLab
+# añadir 127.0.0.1 gitlab.iot.test en /etc/hosts
+# sacar la contraseña de root
+# usar la contraseña de root para acceder a GitLab
 # crear usuario y proyecto iot-lab con su repo
 # crear token de acceso del usuario iot-lab para Argo CD
 

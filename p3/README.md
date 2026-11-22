@@ -48,6 +48,9 @@ With `automated` sync enabled, Argo CD:
 
 ```
 p3/
+  app/
+    deployment.yaml    wil42/playground image, 2 replicas, port 8888
+    service.yaml       LoadBalancer service on port 8888
   confs/
     application.yaml   Argo CD Application pointing to the GitHub repository
   scripts/
@@ -57,16 +60,20 @@ p3/
     clean.sh           Deletes the cluster
 ```
 
-The application manifests are not stored here. They live in the public repository
-[malochato/iot-malde-ch](https://github.com/malochato/iot-malde-ch), in the
-`manifests/` folder:
+Argo CD does not deploy from this folder. It deploys from the public repository
+[malochato/iot-malde-ch](https://github.com/malochato/iot-malde-ch), which holds
+the same files in a `manifests/` folder:
 
 ```
 iot-malde-ch/
   manifests/
-    deployment.yaml    wil42/playground image, 2 replicas, port 8888
-    service.yaml       LoadBalancer service on port 8888
+    deployment.yaml
+    service.yaml
 ```
+
+`app/` is a reference copy of the initial state pushed to that repository
+(`wil42/playground:v1`). Once the image tag or the replicas are changed on
+GitHub, the cluster follows GitHub, not this copy.
 
 ## Usage
 
