@@ -11,7 +11,27 @@ system_stage() {
     local layout="$1"
 
     apt-get update
-    apt-get full-upgrade -y
+
+    # grub-pc can ask where to install GRUB during a full upgrade.  In a
+    # headless VirtualBox VM that prompt has no terminal and dpkg fails.
+    # Select the physical disk containing the root filesystem automatically.
+    ROOT_SOURCE="$(findmnt -n -o SOURCE /)"
+    ROOT_DISK="$(lsblk -nps -o PKNAME "$ROOT_SOURCE" | tail -n1)"
+    if [[ -z "$ROOT_DISK" || ! -b "$ROOT_DISK" ]]; then
+        ROOT_DISK=""
+        cat <<'EOF' | debconf-set-selections
+grub-pc grub-pc/install_devices_empty boolean true
+EOF
+    else
+        cat <<EOF | debconf-set-selections
+grub-pc grub-pc/install_devices string $ROOT_DISK
+grub-pc grub-pc/install_devices_empty boolean false
+EOF
+    fi
+
+    apt-get -o Dpkg::Options::="--force-confdef" \
+        -o Dpkg::Options::="--force-confold" full-upgrade -y
+
     apt-get install -y \
         xfce4 xfce4-terminal lightdm firefox-esr \
         git curl ca-certificates gnupg jq rsync \
