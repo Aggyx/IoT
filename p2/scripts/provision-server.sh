@@ -188,70 +188,53 @@ spec:
       targetPort: 5678
 EOF
 
-echo "Esperando a que Traefik se inicialice (puede tardar más de 60 segundos)..."
-for i in $(seq 1 300); do
-  if k3s kubectl get crd ingressroutes.traefik.io &>/dev/null 2>&1; then
-    echo "Los CRD de Traefik están listos"
-    break
-  fi
-  if [ $((i % 30)) -eq 0 ]; then
-    echo "Esperando a los CRD de Traefik... ($i/300 segundos)"
-  fi
-  sleep 1
-done
-
-k3s kubectl wait --for=condition=Established crd/ingressroutes.traefik.io --timeout=60s
-
 echo "Esperando a que los pods de Traefik se levanten..."
 k3s kubectl wait --for=create deployment/traefik -n kube-system --timeout=120s
 k3s kubectl rollout status deployment/traefik -n kube-system --timeout=120s
 
-# ---------------- Enrutamiento de Traefik basado en host ----------------
+# ---------------- Ingress estándar procesado por Traefik ----------------
 cat > "$MANIFEST_DIR/ingress.yaml" <<'EOF'
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: app1
-  namespace: default
+  name: apps
 spec:
-  entryPoints: [web]
-  routes:
-    - match: Host(`app1.com`)
-      kind: Rule
-      priority: 100
-      services:
-        - name: app1
-          port: 80
+  ingressClassName: traefik
+  rules:
+    - host: app1.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app1
+                port:
+                  number: 80
+    - host: app2.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app2
+                port:
+                  number: 80
 ---
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: app2
-  namespace: default
-spec:
-  entryPoints: [web]
-  routes:
-    - match: Host(`app2.com`)
-      kind: Rule
-      priority: 100
-      services:
-        - name: app2
-          port: 80
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
   name: app3-default
-  namespace: default
+  annotations:
+    traefik.ingress.kubernetes.io/router.priority: "1"
 spec:
-  entryPoints: [web]
-  routes:
-    - match: PathPrefix(`/`)
-      kind: Rule
-      priority: 1            # lowest priority = fallback
-      services:
-        - name: app3
-          port: 80
+  ingressClassName: traefik
+  defaultBackend:
+    service:
+      name: app3
+      port:
+        number: 80
 EOF
 
 echo "Aplicando manifiestos..."
@@ -269,8 +252,8 @@ echo "Estado de los Pods:"
 k3s kubectl get pods -A
 
 echo ""
-echo "Estado de los IngressRoute:"
-k3s kubectl get ingressroute -A
+echo "Estado del Ingress:"
+k3s kubectl get ingress -A
 
 echo ""
 echo "Cluster levantado!"
