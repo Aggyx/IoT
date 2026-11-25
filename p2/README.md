@@ -109,8 +109,7 @@ end
 
 ### IngressRoute frente a Ingress oficial
 
-La API oficial es **`networking.k8s.io/v1`**, no `networking.k8s.iot`.
-Traefik es el controlador/proxy; `Ingress` e `IngressRoute` son dos
+La API oficial es **`networking.k8s.io/v1`** Traefik es el controlador/proxy; `Ingress` e `IngressRoute` son dos
 formas de configurarlo. k3s instala Traefik por defecto y puede procesar ambas.
 
 | Aspecto | Ingress | IngressRoute |
@@ -232,66 +231,6 @@ Cuando llega una solicitud:
 
 ---
 
-## Problemas Solucionados en la Configuración
-
-### Problema 1: Incrementar memoria y vCPU
-### Problema 2: CRD de Traefik No Está Listo
-
-**Lo que estaba sucediendo:**
-```
-k3s kubectl get ingressroute  
-Error: el servidor no tiene el tipo de recurso "ingressroute"
-```
-
-**Por qué:** Traefik se instala vía Helm y registra su Definición de Recurso Personalizado (IngressRoute). Esto tarda tiempo. El script verificaba antes de que estuviera listo.
-
-**Solución** Esperar a que esté listo
-
-
-## Mejores Prácticas Aplicadas
-
-### 1. **Scripts Defensivos**
-```bash
-set -eu  # Salir en error, error en variables indefinidas
-# Siempre verificar precondiciones antes de proceder
-if [ ! -f /var/lib/rancher/k3s/server/node-token ]; then
-  echo "ERROR: TOKEN no encontrado"
-  exit 1
-fi
-```
-
-### 2. **Descubrimiento Dinámico**
-```bash
-# No codificar nombres de interfaz; descubrirlos
-IFACE=$(ip -o -4 addr show | awk '{print $2, $4}' | grep "$NODE_IP" | cut -d' ' -f1)
-```
-
-### 3. **Esperar Dependencias**
-```bash
-# Usar bucles de sondeo con verificaciones explícitas
-for i in $(seq 1 300); do
-  if k3s kubectl get crd ingressroutes.traefik.io &>/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-```
-
-### 4. **Aplicación Explícita de Manifiestos**
-```bash
-# No confiar solo en auto-despliegue; aplicar explícitamente
-k3s kubectl apply -f "$MANIFEST_DIR/ingress.yaml"
-```
-
-### 5. **Verificación de Estado**
-```bash
-echo "Estado de Pods:"
-k3s kubectl get pods -A
-
-echo "Estado de IngressRoute:"
-k3s kubectl get ingressroute -A
-```
-
 ## Pruebas de la Configuración
 
 ```bash
@@ -301,6 +240,8 @@ vagrant up gabriferS
 
 # SSH en él
 vagrant ssh gabriferS
+
+k3s kubectl get pods -A
 
 # Prueba el enrutamiento
 sudo -i
@@ -327,8 +268,7 @@ k3s kubectl get svc traefik -n kube-system
 k3s kubectl get deployment app1 app2 app3
 k3s kubectl get endpointslices -l kubernetes.io/service-name=app2
 
-# Es normal que esto no muestre las IngressRoutes: son otro tipo de recurso
-k3s kubectl get ingress -A
+k3s kubectl get ingressroute -A
 ```
 
 Desde el host, sin modificar DNS ni `/etc/hosts`:
